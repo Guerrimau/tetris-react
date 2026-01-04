@@ -28,41 +28,77 @@ const generateGameStateMatrix = () => {
 function App() {
   const initialState = generateGameStateMatrix();
   const [gameState, setGameState] = useState(initialState);
-  const [itemHistory, setItemHistory] = useState([])
   const idCounterRef = useRef(0);
 
-  const addToTheTop = (block: Block) => {
+  const addBlock = (block: Block) => {
     setGameState((prevState) => {
       const newState = prevState.map((row) => [...row]);
-      newState[block.positionX][block.positionY] = block;
+      newState[block.positionY][block.positionX] = block;
       return newState;
     });
   };
 
   const onStartGame = () => {
-    const latestId = idCounterRef.current + 1
+    const latestId = idCounterRef.current + 1;
     const block = new Block(latestId, 0, 0, "red");
-    idCounterRef.current = latestId
-    setItemHistory(prev => [...prev, block])
-    addToTheTop(block);
+    idCounterRef.current = latestId;
+    addBlock(block);
   };
 
-  console.log(itemHistory)
+  const updateLatestBlockPosition = (
+    modX: number,
+    modY: number,
+    state: (Block | null)[][]
+  ) => {
+    const stateCopy = state.map((row) => [...row]);
+
+    let currentX: number | null = null;
+    let currentY: number | null = null;
+    let block: Block | null = null;
+
+    stateCopy.forEach((row, indexY) => {
+      row.forEach((item, indexX) => {
+        console.log(item);
+        if (item?.id === idCounterRef.current) {
+          currentX = indexX;
+          currentY = indexY;
+          block = item;
+        }
+      });
+    });
+
+    if (currentX === null || currentY === null || block === null) {
+      return;
+    }
+
+    stateCopy[currentY][currentX] = null;
+
+    const updatedY = currentY + modY;
+    const updatedX = currentX + modX;
+
+    stateCopy[updatedY][updatedX] = block;
+
+    setGameState(stateCopy);
+  };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
       case "ArrowRight":
-        
+        updateLatestBlockPosition(+1, 0, gameState);
         break;
       case "ArrowLeft":
-        
+        updateLatestBlockPosition(-1, 0, gameState);
         break;
-    
+      case "ArrowUp":
+        updateLatestBlockPosition(0, 1, gameState);
+        break;
+      case "ArrowDown":
+        updateLatestBlockPosition(0, -1, gameState);
+        break;
       default:
         break;
     }
-    
-  }
+  };
 
   return (
     <div tabIndex={0} onKeyDown={handleKeyDown}>
@@ -76,14 +112,12 @@ function App() {
           gridTemplateRows: `repeat(${rows}, ${squareSize}px)`,
         }}
       >
-        {gameState.map((rows) => {
+        {[...gameState].reverse().map((rows) => {
           return rows.map((item: Block | null) => {
-            if (!item) return null;
-
             return (
               <div
                 style={{
-                  backgroundColor: item.color,
+                  backgroundColor: item?.color,
                   height: squareSize,
                   width: squareSize,
                 }}
