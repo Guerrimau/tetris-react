@@ -1,99 +1,174 @@
 import { useRef, useState } from "react";
 import "./App.css";
 
-const rows = 15;
-const columns = 10;
-const squareSize = 50;
-const canvaHeight = squareSize * rows;
-const canvaWidth = squareSize * columns;
+const ROWS = 15;
+const BUFFER = 2;
+const MEMORY_ROWS = ROWS + BUFFER;
+const COLUMNS = 10;
+const SQUARE_SIZE = 50;
+const CANVA_HEIGHT = SQUARE_SIZE * ROWS;
+const CANVA_WIDTH = SQUARE_SIZE * COLUMNS;
 
 class Block {
-  public id;
+  public figureId;
+  public color;
   public positionX;
   public positionY;
-  public color;
+  // public leftBlock: Block | null;
+  // public rightBlock: Block | null;
+  // public topBlock: Block | null;
+  // public bottomBlock: Block | null;
 
-  constructor(id: number, positionX: number, positionY: number, color: string) {
+  constructor(
+    figureId: number,
+    positionX: number,
+    positionY: number,
+    color: string
+    // leftBlock?: Block | null,
+    // rightBlock?: Block | null,
+    // topBlock?: Block | null,
+    // bottomBlock?: Block | null
+  ) {
     this.positionX = positionX;
     this.positionY = positionY;
     this.color = color;
-    this.id = id;
+    this.figureId = figureId;
+    // this.leftBlock = leftBlock || null;
+    // this.rightBlock = rightBlock || null;
+    // this.topBlock = topBlock || null;
+    // this.bottomBlock = bottomBlock || null;
   }
 }
 
-const generateGameStateMatrix = () => {
-  return Array(rows).fill(Array(columns).fill(null));
+type CellType = Block | null;
+
+const generateGameStateMatrix = (): null[][] => {
+  return Array(MEMORY_ROWS).fill(Array(COLUMNS).fill(null));
 };
 
 function App() {
   const initialState = generateGameStateMatrix();
-  const [gameState, setGameState] = useState(initialState);
-  const idCounterRef = useRef(0);
+  const [gameState, setGameState] = useState<CellType[][]>(initialState);
+  const figureIdCounterRef = useRef(0);
 
-  const addBlock = (block: Block) => {
-    setGameState((prevState) => {
-      const newState = prevState.map((row) => [...row]);
-      newState[block.positionY][block.positionX] = block;
-      return newState;
+  const addBlock = (block: Block, gameState: CellType[][]) => {
+    const newState = gameState.map((row) => [...row]);
+    newState[block.positionY][block.positionX] = block;
+    return newState;
+  };
+
+  const addFigure = (gameState) => {
+    const newFigureId = figureIdCounterRef.current + 1;
+    figureIdCounterRef.current = newFigureId;
+
+    const blockCoordenates = [
+      {
+        x: 5,
+        y: 5,
+      },
+      {
+        x: 5,
+        y: 5 - 1,
+      },
+      {
+        x: 4,
+        y: 5 - 1,
+      },
+      {
+        x: 6,
+        y: 5 - 1,
+      },
+    ];
+    const color = "red";
+    let stateCopy = [...gameState].map((row) => [...row]) as CellType[][];
+
+    blockCoordenates.forEach((blockCoord) => {
+      const block = new Block(newFigureId, blockCoord.x, blockCoord.y, color);
+      stateCopy = addBlock(block, stateCopy);
     });
+
+    return stateCopy;
   };
 
   const onStartGame = () => {
-    const latestId = idCounterRef.current + 1;
-    const block = new Block(latestId, 0, 0, "red");
-    idCounterRef.current = latestId;
-    addBlock(block);
+    const updatedState = addFigure(gameState);
+    setGameState(updatedState);
   };
 
-  const updateLatestBlockPosition = (
+  const updateLatestFigurePosition = (
     modX: number,
     modY: number,
-    state: (Block | null)[][]
+    state: CellType[][]
   ) => {
     const stateCopy = state.map((row) => [...row]);
 
-    let currentX: number | null = null;
-    let currentY: number | null = null;
-    let block: Block | null = null;
+    const blockCoordenates: {
+      currentX: number | null;
+      currentY: number | null;
+      block: CellType;
+    }[] = [];
 
     stateCopy.forEach((row, indexY) => {
       row.forEach((item, indexX) => {
-        console.log(item);
-        if (item?.id === idCounterRef.current) {
-          currentX = indexX;
-          currentY = indexY;
-          block = item;
+        if (item?.figureId === figureIdCounterRef.current) {
+          blockCoordenates.push({
+            currentX: indexX,
+            currentY: indexY,
+            block: item,
+          });
         }
       });
     });
 
-    if (currentX === null || currentY === null || block === null) {
+    if (blockCoordenates.length === 0) {
       return;
     }
 
-    stateCopy[currentY][currentX] = null;
+    const sortByMod = (a, b) => {
+      if (modX > 0) return b.currentX - a.currentX;
+      if (modX < 0) return a.currentX - b.currentX;
+      if (modY > 0) return b.currentY - a.currentY;
+      if (modY < 0) return a.currentY - b.currentY;
+      return 1;
+    };
 
-    const updatedY = currentY + modY;
-    const updatedX = currentX + modX;
+    let shouldNotMove = false;
 
-    stateCopy[updatedY][updatedX] = block;
+    blockCoordenates.sort(sortByMod).forEach((item) => {
+      if (shouldNotMove) return;
 
-    setGameState(stateCopy);
+      stateCopy[item.currentY][item.currentX] = null;
+
+      const updatedY = item.currentY + modY;
+      const updatedX = item.currentX + modX;
+
+      if (updatedY < 0 || stateCopy[updatedY][updatedX] ) {
+        shouldNotMove = true;
+        return
+      }
+
+      stateCopy[updatedY][updatedX] = item.block;
+    });
+
+    if(!shouldNotMove) setGameState(stateCopy)
+
+
+    return shouldNotMove
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
       case "ArrowRight":
-        updateLatestBlockPosition(+1, 0, gameState);
+        updateLatestFigurePosition(+1, 0, gameState);
         break;
       case "ArrowLeft":
-        updateLatestBlockPosition(-1, 0, gameState);
+        updateLatestFigurePosition(-1, 0, gameState);
         break;
       case "ArrowUp":
-        updateLatestBlockPosition(0, 1, gameState);
+        updateLatestFigurePosition(0, 1, gameState);
         break;
       case "ArrowDown":
-        updateLatestBlockPosition(0, -1, gameState);
+        updateLatestFigurePosition(0, -1, gameState);
         break;
       default:
         break;
@@ -104,22 +179,23 @@ function App() {
     <div tabIndex={0} onKeyDown={handleKeyDown}>
       <div
         style={{
-          height: `${canvaHeight}px`,
-          width: `${canvaWidth}px`,
+          height: `${CANVA_HEIGHT}px`,
+          width: `${CANVA_WIDTH}px`,
           border: "1px solid grey",
           display: "grid",
-          gridTemplateColumns: `repeat(${columns}, ${squareSize}px)`,
-          gridTemplateRows: `repeat(${rows}, ${squareSize}px)`,
+          gridTemplateColumns: `repeat(${COLUMNS}, ${SQUARE_SIZE}px)`,
+          gridTemplateRows: `repeat(${ROWS}, ${SQUARE_SIZE}px)`,
         }}
       >
-        {[...gameState].reverse().map((rows) => {
-          return rows.map((item: Block | null) => {
+        {[...gameState].reverse().map((row, index) => {
+          if (index + 1 <= BUFFER) return null;
+          return row.map((item: Block | null) => {
             return (
               <div
                 style={{
                   backgroundColor: item?.color,
-                  height: squareSize,
-                  width: squareSize,
+                  height: SQUARE_SIZE,
+                  width: SQUARE_SIZE,
                 }}
               ></div>
             );
