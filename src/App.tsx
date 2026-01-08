@@ -1,111 +1,80 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
-
-const ROWS = 15;
-const BUFFER = 2;
-const MEMORY_ROWS = ROWS + BUFFER;
-const COLUMNS = 10;
-const SQUARE_SIZE = 50;
-const CANVA_HEIGHT = SQUARE_SIZE * ROWS;
-const CANVA_WIDTH = SQUARE_SIZE * COLUMNS;
-
-class Block {
-  public figureId;
-  public color;
-  public positionX;
-  public positionY;
-  // public leftBlock: Block | null;
-  // public rightBlock: Block | null;
-  // public topBlock: Block | null;
-  // public bottomBlock: Block | null;
-
-  constructor(
-    figureId: number,
-    positionX: number,
-    positionY: number,
-    color: string
-    // leftBlock?: Block | null,
-    // rightBlock?: Block | null,
-    // topBlock?: Block | null,
-    // bottomBlock?: Block | null
-  ) {
-    this.positionX = positionX;
-    this.positionY = positionY;
-    this.color = color;
-    this.figureId = figureId;
-    // this.leftBlock = leftBlock || null;
-    // this.rightBlock = rightBlock || null;
-    // this.topBlock = topBlock || null;
-    // this.bottomBlock = bottomBlock || null;
-  }
-}
-
-type CellType = Block | null;
-
-const generateGameStateMatrix = (): null[][] => {
-  return Array(MEMORY_ROWS).fill(Array(COLUMNS).fill(null));
-};
+import { generateGameStateMatrix, getRandomInt } from "./utils";
+import { ALL_FIGURES } from "./figures";
+import {
+  BUFFER,
+  CANVA_HEIGHT,
+  CANVA_WIDTH,
+  COLUMNS,
+  ROWS,
+  SQUARE_SIZE,
+} from "./config";
+import { Block } from "./Block";
+import type { ItemType } from "./types";
 
 function App() {
   const initialState = generateGameStateMatrix();
-  const [gameState, setGameState] = useState<CellType[][]>(initialState);
+
+  const [gameState, setGameState] = useState<ItemType[][]>(initialState);
+
+  const gameStateRef = useRef<ItemType[][]>(initialState);
+  const figureBagRef = useRef<number[]>([]);
   const figureIdCounterRef = useRef(0);
 
-  const addBlock = (block: Block, gameState: CellType[][]) => {
+  const updateState = (newState: ItemType[][]) => {
+    setGameState(newState);
+    gameStateRef.current = newState;
+  };
+
+  const getNextFigure = () => {
+    if (figureBagRef.current.length === 0) {
+      figureBagRef.current = ALL_FIGURES.map((_, i) => i);
+      for (let i = figureBagRef.current.length - 1; i > 0; i--) {
+        const j = getRandomInt(0, i);
+        [figureBagRef.current[i], figureBagRef.current[j]] = [
+          figureBagRef.current[j],
+          figureBagRef.current[i],
+        ];
+      }
+    }
+
+    const figureIndex = figureBagRef.current.pop()!;
+    return ALL_FIGURES[figureIndex];
+  };
+
+  const addBlock = (block: Block, gameState: ItemType[][]) => {
     const newState = gameState.map((row) => [...row]);
     newState[block.positionY][block.positionX] = block;
     return newState;
   };
 
-  const addFigure = (gameState) => {
+  const addFigure = (gameState: ItemType[][]) => {
     const newFigureId = figureIdCounterRef.current + 1;
     figureIdCounterRef.current = newFigureId;
 
-    const blockCoordenates = [
-      {
-        x: 5,
-        y: 5,
-      },
-      {
-        x: 5,
-        y: 5 - 1,
-      },
-      {
-        x: 4,
-        y: 5 - 1,
-      },
-      {
-        x: 6,
-        y: 5 - 1,
-      },
-    ];
-    const color = "red";
-    let stateCopy = [...gameState].map((row) => [...row]) as CellType[][];
+    let stateCopy = [...gameState].map((row) => [...row]) as ItemType[][];
 
-    blockCoordenates.forEach((blockCoord) => {
-      const block = new Block(newFigureId, blockCoord.x, blockCoord.y, color);
+    const figure = getNextFigure();
+
+    figure.coords.forEach((figureBlock) => {
+      const block = new Block(
+        newFigureId,
+        figureBlock.x,
+        figureBlock.y,
+        figure.color
+      );
       stateCopy = addBlock(block, stateCopy);
     });
 
     return stateCopy;
   };
 
-  const onStartGame = () => {
-    const updatedState = addFigure(gameState);
-    setGameState(updatedState);
-  };
-
-  const updateLatestFigurePosition = (
-    modX: number,
-    modY: number,
-    state: CellType[][]
-  ) => {
-    const stateCopy = state.map((row) => [...row]);
-
+  const getLatestFigureBlockCoordenates = (stateCopy: ItemType[][]) => {
     const blockCoordenates: {
       currentX: number | null;
       currentY: number | null;
-      block: CellType;
+      block: ItemType;
     }[] = [];
 
     stateCopy.forEach((row, indexY) => {
@@ -119,12 +88,19 @@ function App() {
         }
       });
     });
+    return blockCoordenates;
+  };
 
-    if (blockCoordenates.length === 0) {
-      return;
-    }
+  const updateLatestFigurePosition = (
+    modX: number,
+    modY: number,
+    state: ItemType[][]
+  ) => {
+    const stateCopy = state.map((row) => [...row]);
 
-    const sortByMod = (a, b) => {
+    const blockCoordenates = getLatestFigureBlockCoordenates(stateCopy);
+
+    const sortByMod = (a: any, b: any) => { //eslint-disable-line
       if (modX > 0) return b.currentX - a.currentX;
       if (modX < 0) return a.currentX - b.currentX;
       if (modY > 0) return b.currentY - a.currentY;
@@ -137,23 +113,98 @@ function App() {
     blockCoordenates.sort(sortByMod).forEach((item) => {
       if (shouldNotMove) return;
 
-      stateCopy[item.currentY][item.currentX] = null;
+      stateCopy[item.currentY as number][item.currentX as number] = null;
 
-      const updatedY = item.currentY + modY;
-      const updatedX = item.currentX + modX;
+      const updatedY = item.currentY as number + modY;
+      const updatedX = item.currentX as number + modX;
 
-      if (updatedY < 0 || stateCopy[updatedY][updatedX] ) {
+      if (updatedY < 0 || stateCopy[updatedY][updatedX]) {
         shouldNotMove = true;
-        return
+        return true;
       }
 
       stateCopy[updatedY][updatedX] = item.block;
     });
 
-    if(!shouldNotMove) setGameState(stateCopy)
+    if (!shouldNotMove) {
+      updateState(stateCopy);
+    }
 
+    return shouldNotMove;
+  };
 
-    return shouldNotMove
+  const rotateLatestFigure = (state: ItemType[][]) => {
+    const stateCopy = state.map((row) => [...row]);
+    const blockCoordenates = getLatestFigureBlockCoordenates(stateCopy);
+
+    let lowestY = Infinity;
+    let lowestX = Infinity;
+
+    blockCoordenates.forEach((block) => {
+      if (Number(block.currentY) < lowestY) {
+        lowestY = Number(block.currentY);
+      }
+
+      if (Number(block.currentX) < lowestX) {
+        lowestX = Number(block.currentX);
+      }
+    });
+
+    const figureMatrix: ItemType[][] = [];
+    let maxIndex = 0
+
+    blockCoordenates.forEach((block) => {
+      const adjustedX = Number(block.currentX) - lowestX;
+      const adjustedY = Number(block.currentY) - lowestY;
+
+      if(adjustedX > maxIndex) maxIndex = adjustedX
+      if(adjustedY > maxIndex) maxIndex = adjustedY
+
+      if (!figureMatrix[adjustedX]) {
+        figureMatrix[adjustedX] = [];
+      }
+      figureMatrix[adjustedX][adjustedY] = block.block;
+    });
+
+    // Traspose Matrix With Empty Values
+    const trasposedMatrix: ItemType[][] = Array.from(
+      { length: maxIndex + 1 },
+      () => Array(maxIndex + 1).fill(null)
+    );
+
+    // Traspose - copy from figureMatrix[i][j] to trasposedMatrix[j][i]
+    for (let i = 0; i <= maxIndex; i++) {
+      for (let j = 0; j <= maxIndex; j++) {
+        // Check if figureMatrix[i] exists and figureMatrix[i][j] has a value
+        if (figureMatrix[i] && figureMatrix[i][j]) {
+          trasposedMatrix[j][i] = figureMatrix[i][j];
+        }
+      }
+    }
+    // Reverse
+    for (let i = 0; i < trasposedMatrix.length; i++) {
+      trasposedMatrix[i].reverse();
+    }
+     
+    blockCoordenates.forEach((block) => {
+      stateCopy[block.currentY as number][block.currentX as number] = null;
+    });
+
+    trasposedMatrix.forEach((rows, indexX) => {
+      rows.forEach((item, indexY) => {
+        const newY = lowestY + indexY
+        const newX = lowestX + indexX
+
+        stateCopy[newY][newX] = item
+      })
+    })
+
+    updateState(stateCopy);
+  };
+
+  const handleStartGame = () => {
+    const updatedState = addFigure(gameState);
+    updateState(updatedState);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -165,7 +216,7 @@ function App() {
         updateLatestFigurePosition(-1, 0, gameState);
         break;
       case "ArrowUp":
-        updateLatestFigurePosition(0, 1, gameState);
+        rotateLatestFigure(gameState);
         break;
       case "ArrowDown":
         updateLatestFigurePosition(0, -1, gameState);
@@ -174,6 +225,44 @@ function App() {
         break;
     }
   };
+
+  const checkAndDeleteCompleteRows = (gameState: ItemType[][]) => {
+    const completeRowIndex = gameState.findIndex((rows) =>
+      rows.every((item) => item !== null)
+    );
+    if (completeRowIndex < 0) return;
+
+    const updatedState = [...gameState].map((row) => [...row]);
+    updatedState.splice(completeRowIndex, 1);
+    updatedState.push(Array(COLUMNS).fill(null));
+
+    updateState(updatedState);
+  };
+
+  const autoMoveDownCurrentFigure = () => {
+    const shouldNotMove = updateLatestFigurePosition(
+      0,
+      -1,
+      gameStateRef.current
+    );
+    if (shouldNotMove) {
+      const updatedState = addFigure(gameStateRef.current);
+      updateState(updatedState);
+      return;
+    }
+    setTimeout(() => {
+      autoMoveDownCurrentFigure();
+    }, 500);
+  };
+
+  useEffect(() => {
+    if (figureIdCounterRef.current === 0) return;
+    autoMoveDownCurrentFigure();
+  }, [figureIdCounterRef.current]); //eslint-disable-line
+
+  useEffect(() => {
+    checkAndDeleteCompleteRows(gameState);
+  }, [gameState]); //eslint-disable-line
 
   return (
     <div tabIndex={0} onKeyDown={handleKeyDown}>
@@ -202,7 +291,7 @@ function App() {
           });
         })}
       </div>
-      <button onClick={onStartGame}>Start Game</button>
+      <button onClick={handleStartGame}>Start Game</button>
     </div>
   );
 }

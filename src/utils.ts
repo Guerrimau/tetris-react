@@ -1,7 +1,7 @@
-export const sortByMod = (a, b) => { 
-    if(modX > 0) return b.currentX - a.currentX
-    if(modX < 0) return a.currentX - b.currentX
-    if(modY > 0) return b.currentY - a.currentY
-    if(modY < 0) return a.currentY - b.currentY
-    return 1
-}
+import { COLUMNS, MEMORY_ROWS } from "./config";
+
+export const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;   
+
+export const generateGameStateMatrix = (): null[][] => {
+    return Array(MEMORY_ROWS).fill(Array(COLUMNS).fill(null));
+  };
