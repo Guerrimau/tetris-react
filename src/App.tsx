@@ -17,6 +17,7 @@ function App() {
   const initialState = generateGameStateMatrix();
 
   const [gameState, setGameState] = useState<ItemType[][]>(initialState);
+  const [gameFinished, setGameFinished] = useState(false);
 
   const gameStateRef = useRef<ItemType[][]>(initialState);
   const figureBagRef = useRef<number[]>([]);
@@ -43,10 +44,16 @@ function App() {
     return ALL_FIGURES[figureIndex];
   };
 
-  const addBlock = (block: Block, gameState: ItemType[][]) => {
+  const addBlock = (
+    block: Block,
+    gameState: ItemType[][]
+  ): { newState: ItemType[][]; added: boolean } => {
     const newState = gameState.map((row) => [...row]);
+    if (newState[block.positionY][block.positionX])
+      return { newState, added: false };
+
     newState[block.positionY][block.positionX] = block;
-    return newState;
+    return { newState, added: true };
   };
 
   const addFigure = (gameState: ItemType[][]) => {
@@ -54,6 +61,7 @@ function App() {
     figureIdCounterRef.current = newFigureId;
 
     let stateCopy = [...gameState].map((row) => [...row]) as ItemType[][];
+    let added = true;
 
     const figure = getNextFigure();
 
@@ -64,10 +72,14 @@ function App() {
         figureBlock.y,
         figure.color
       );
-      stateCopy = addBlock(block, stateCopy);
+      const addBlockRes = addBlock(block, stateCopy);
+      if (!addBlockRes.added) {
+        added = addBlockRes.added;
+      }
+      stateCopy = addBlockRes.newState;
     });
 
-    return stateCopy;
+    return { newState: stateCopy, added };
   };
 
   const getLatestFigureBlockCoordenates = (stateCopy: ItemType[][]) => {
@@ -100,7 +112,8 @@ function App() {
 
     const blockCoordenates = getLatestFigureBlockCoordenates(stateCopy);
 
-    const sortByMod = (a: any, b: any) => { //eslint-disable-line
+    const sortByMod = (a: any, b: any) => {
+       
       if (modX > 0) return b.currentX - a.currentX;
       if (modX < 0) return a.currentX - b.currentX;
       if (modY > 0) return b.currentY - a.currentY;
@@ -115,8 +128,8 @@ function App() {
 
       stateCopy[item.currentY as number][item.currentX as number] = null;
 
-      const updatedY = item.currentY as number + modY;
-      const updatedX = item.currentX as number + modX;
+      const updatedY = (item.currentY as number) + modY;
+      const updatedX = (item.currentX as number) + modX;
 
       if (updatedY < 0 || stateCopy[updatedY][updatedX]) {
         shouldNotMove = true;
@@ -151,14 +164,14 @@ function App() {
     });
 
     const figureMatrix: ItemType[][] = [];
-    let maxIndex = 0
+    let maxIndex = 0;
 
     blockCoordenates.forEach((block) => {
       const adjustedX = Number(block.currentX) - lowestX;
       const adjustedY = Number(block.currentY) - lowestY;
 
-      if(adjustedX > maxIndex) maxIndex = adjustedX
-      if(adjustedY > maxIndex) maxIndex = adjustedY
+      if (adjustedX > maxIndex) maxIndex = adjustedX;
+      if (adjustedY > maxIndex) maxIndex = adjustedY;
 
       if (!figureMatrix[adjustedX]) {
         figureMatrix[adjustedX] = [];
@@ -185,25 +198,25 @@ function App() {
     for (let i = 0; i < trasposedMatrix.length; i++) {
       trasposedMatrix[i].reverse();
     }
-     
+
     blockCoordenates.forEach((block) => {
       stateCopy[block.currentY as number][block.currentX as number] = null;
     });
 
     trasposedMatrix.forEach((rows, indexX) => {
       rows.forEach((item, indexY) => {
-        const newY = lowestY + indexY
-        const newX = lowestX + indexX
+        const newY = lowestY + indexY;
+        const newX = lowestX + indexX;
 
-        stateCopy[newY][newX] = item
-      })
-    })
+        stateCopy[newY][newX] = item;
+      });
+    });
 
     updateState(stateCopy);
   };
 
   const handleStartGame = () => {
-    const updatedState = addFigure(gameState);
+    const { newState: updatedState } = addFigure(gameState);
     updateState(updatedState);
   };
 
@@ -227,16 +240,16 @@ function App() {
   };
 
   const checkAndDeleteCompleteRows = (gameState: ItemType[][]) => {
-    const completeRowIndex = gameState.findIndex((rows) =>
-      rows.every((item) => item !== null)
+    const incompleteRows = gameState.filter(
+      (row) => !row.every((item) => item !== null)
     );
-    if (completeRowIndex < 0) return;
+    const deletedCount = gameState.length - incompleteRows.length;
 
-    const updatedState = [...gameState].map((row) => [...row]);
-    updatedState.splice(completeRowIndex, 1);
-    updatedState.push(Array(COLUMNS).fill(null));
+    const newRows = Array(deletedCount)
+      .fill(null)
+      .map(() => Array(COLUMNS).fill(null));
 
-    updateState(updatedState);
+    return [...incompleteRows, ...newRows];
   };
 
   const autoMoveDownCurrentFigure = () => {
@@ -246,7 +259,10 @@ function App() {
       gameStateRef.current
     );
     if (shouldNotMove) {
-      const updatedState = addFigure(gameStateRef.current);
+      const addFigureRes = addFigure(gameStateRef.current);
+      if (!addFigureRes.added) return setGameFinished(!addFigureRes.added);
+
+      const updatedState = checkAndDeleteCompleteRows(addFigureRes.newState);
       updateState(updatedState);
       return;
     }
@@ -256,13 +272,9 @@ function App() {
   };
 
   useEffect(() => {
-    if (figureIdCounterRef.current === 0) return;
+    if (figureIdCounterRef.current === 0 || gameFinished) return;
     autoMoveDownCurrentFigure();
   }, [figureIdCounterRef.current]); //eslint-disable-line
-
-  useEffect(() => {
-    checkAndDeleteCompleteRows(gameState);
-  }, [gameState]); //eslint-disable-line
 
   return (
     <div tabIndex={0} onKeyDown={handleKeyDown}>
