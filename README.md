@@ -1,73 +1,133 @@
-# React + TypeScript + Vite
+# Tetris - React State Management Deep Dive
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A fully functional Tetris game built with React to explore advanced state management patterns in complex, frame-dependent scenarios.
 
-Currently, two official plugins are available:
+## 🎯 The Challenge
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This project was built specifically to test state management in scenarios that push React's limits:
+- **Frame-based rendering** - Continuous game loop with setTimeout-based gravity
+- **Multi-source state synchronization** - Active piece, locked grid, figure bag system
+- **Real-time collision detection** - Frame-by-frame validation before movement
+- **Matrix transformations** - Complex rotation logic with transpose operations
+- **Ref-based state hybrid** - Using both `useState` and `useRef` to manage renders vs game loop
 
-## React Compiler
+## 🧪 Key Implementation Patterns
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. **Dual State Architecture**
+```typescript
+const [gameState, setGameState] = useState<ItemType[][]>(initialState);
+const gameStateRef = useRef<ItemType[][]>(initialState);
+```
+- `useState` triggers renders for UI updates
+- `useRef` provides stable reference for recursive game loop
+- This prevents stale closures in the auto-drop mechanism
 
-## Expanding the ESLint configuration
+### 2. **Seven-Bag Randomizer**
+Implemented the official Tetris randomizer algorithm:
+```typescript
+const getNextFigure = () => {
+  if (figureBagRef.current.length === 0) {
+    // Refill bag with all 7 pieces, then shuffle
+    figureBagRef.current = ALL_FIGURES.map((_, i) => i);
+    // Fisher-Yates shuffle
+  }
+  return ALL_FIGURES[figureBagRef.current.pop()!];
+};
+```
+Ensures fair piece distribution - no frustrating droughts!
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 3. **Smart Movement Validation**
+```typescript
+const sortByMod = (a: any, b: any) => {
+  if (modX > 0) return b.currentX - a.currentX; // Moving right
+  if (modX < 0) return a.currentX - b.currentX; // Moving left
+  if (modY > 0) return b.currentY - a.currentY; // Moving down
+  // ...
+};
+```
+Blocks are updated in directional order to prevent self-collision during movement.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 4. **Matrix Rotation Algorithm**
+Three-step rotation process:
+1. Extract figure blocks into isolated matrix
+2. Transpose the matrix
+3. Reverse each row
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+This implements a 90° clockwise rotation mathematically.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 5. **Line Clear Detection**
+```typescript
+const checkAndDeleteCompleteRows = (gameState: ItemType[][]) => {
+  const incompleteRows = gameState.filter(
+    (row) => !row.every((item) => item !== null)
+  );
+  const deletedCount = gameState.length - incompleteRows.length;
+  // Generate new empty rows at top
+  const newRows = Array(deletedCount).fill(null)
+    .map(() => Array(COLUMNS).fill(null));
+  return [...incompleteRows, ...newRows];
+};
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 6. **Recursive Auto-Drop with Cleanup**
+```typescript
+const autoMoveDownCurrentFigure = () => {
+  const shouldNotMove = updateLatestFigurePosition(0, -1, gameStateRef.current);
+  if (shouldNotMove) {
+    // Lock piece, spawn new one, check lines
+    const addFigureRes = addFigure(gameStateRef.current);
+    if (!addFigureRes.added) return setGameFinished(true); // Game over
+    // ...
+  }
+  setTimeout(() => autoMoveDownCurrentFigure(), 500);
+};
 ```
+
+## 🛠️ Built With
+
+- **React** - UI framework
+- **TypeScript** - Type safety for complex matrix operations
+- **Vite** - Build tool
+- **CSS Grid** - Game board rendering
+
+## 💡 What I Learned
+
+### State Management Insights
+- **When to use refs vs state** - Refs for values needed in async/recursive functions that shouldn't trigger re-renders
+- **Immutable updates** - Why `map((row) => [...row])` is critical for proper React updates
+- **Effect dependency arrays** - Managing game loop restart with `figureIdCounterRef.current` dependency
+
+### Algorithm Challenges Solved
+- **Directional collision detection** - Sorting blocks by movement direction before updating positions
+- **Matrix rotation** - Transpose + reverse for 90° rotation
+- **Fair randomization** - Seven-bag system from official Tetris guidelines
+- **Game over detection** - Checking if new piece can spawn at top
+
+### Performance Considerations
+- Using `useRef` to avoid closure issues in recursive setTimeout
+- Grid-based rendering with CSS Grid (no canvas overhead)
+- Minimizing re-renders by only updating state when necessary
+
+## 🚀 Run Locally
+```bash
+npm install
+npm run dev
+```
+
+## 🎮 Controls
+
+- **Arrow Left/Right** - Move piece
+- **Arrow Up** - Rotate piece
+- **Arrow Down** - Soft drop
+- **Start Game** - Begin playing
+
+## 🔧 Architecture Highlights
+
+- **Buffer zone** - Top rows hidden from view (standard Tetris feature)
+- **Figure ID system** - Tracks active vs locked pieces
+- **Immutable state updates** - All operations create new state copies
+- **Collision-first approach** - Validate before move, not after
+
+---
+
+*Built to master complex state management in React. Learned more debugging rotation logic than expected.* 🎮
